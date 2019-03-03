@@ -1,0 +1,221 @@
+---
+title: "Capstone Milestone Report"
+author: "Keith Erskine"
+date: "03/03/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+```{r Library Load, echo = FALSE, message = FALSE, warning = FALSE}
+library(tidyr)
+library(tibble)
+library(dplyr)
+library(R.utils)
+library(tidytext)
+library(ggplot2)
+```
+
+
+## Goals
+Has the data scientist done basic summaries of the three files? Word counts, line counts and basic data tables?
+Has the data scientist made basic plots, such as histograms to illustrate features of the data?
+Eventually will develop a predictive text application. Need to find what text to predict. 
+
+## Check my work
+
+In order to keep this report consise, I won't be showing (i.e. echo = FALSE) all of the R code in this report. But, you can find the full R Markdown at this location [link]
+
+## Using the Tidytext Package 
+
+Course mentions using R's text mining package (tm) but recent but the tidyverse community offers an alternative in tidytext. Tidytext relies on the tidy principle, applied in this analysis, it's one token per row. This makes it easy to apply other tools (dplyr, tidyr) when exploring and manipulating data. 
+
+## Getting and Examining the Data
+
+Download
+
+The zip files contain a directory "final" which is 2.4 MB in size. In it are subdirectorys of different languages (English, German, Finish, and Russian) each of which have three text files; news, blogs, and twitter. For this report, I'll be using the English files.
+```{r Setwd, echo = FALSE}
+# setwd("./test/")
+```
+
+Next, we'll need to get each of the text files into a tibble that will allow tidytext to manipulate the data. I'll do this using a purpose built function texttidy():
+
+```{r Tibble Data, echo = FALSE, warning = FALSE, message = FALSE}
+texttidy <- function(filename, samplesize = 0.05) {
+        # This function will take a text file and create a tibble with each line of text
+                count <- countLines(filename)
+                ttout <- readLines(filename, n = count * samplesize) %>% # Read in the text
+                        as_tibble() # Turn the output into a tibble
+                names(ttout) <- c("text") # Name the variable 'text'
+                # Done
+                ttout
+                }
+```
+```{r Prep Twitter, warning = FALSE}
+twitter <- texttidy("./final/en_US/en_US.twitter.txt", 0.05)
+head(twitter, 3)
+dim(twitter)
+```
+So, we can see that 'twitter' now a tibble that contains the line of text as it's only variable. the blogs and news text files are prepared using the same function.
+```{r Prep News and Blogs, echo = FALSE}
+blogs <- texttidy("./final/en_US/en_US.blogs.txt", 0.05)
+news <- texttidy("./final/en_US/en_US.news.txt", 0.05)
+```
+
+## Word Counts
+With the text files now ready for analysis, we can look at the number of distinct words in each tibble. I'll do this with another purpose built function called wordcount(). It uses the tidytext function unnest_tokens() to tease out each word, and then uses the stop_words dataset to eliminate words like is, it, the, etc.. (see appendix for source code):
+
+```{r Wordcount Func, echo = FALSE, warning = FALSE, message = FALSE}
+wordcount <- function(ttout) {
+                # This function takes the texttidy() output and finds all the unique words
+                ttout <- ttout %>% 
+                        # Use unnest to get each word in the line
+                        unnest_tokens(word, text) %>%
+                        # Get rid of words like: it, the...
+                        anti_join(stop_words) %>%
+                        # Output a tibble with counts of each word
+                        count(word, sort = TRUE)
+                # Done
+                ttout
+                }
+```
+```{r Twitter Word Count, message = FALSE}
+wctwitter <- wordcount(twitter)
+wctwitter
+```
+This is interesting; Love is one of the top ten words! You also see a word "rt" which means "retweet". One of the challenges in predictive text will be to determine if "rt" is something to include in an algorythum. This phrase has been used less on Twitter since a number of UI changes have been introduced.
+
+What about the other two text files? Are there any words common to all three text files? Here's a graph of the top 20 words in each file:
+
+```{r Word Count Graph, echo = FALSE, warning = FALSE, message = FALSE}
+
+wcblogs <- wordcount(blogs)
+wcnews <- wordcount(news)
+
+totwords <- rbind(wctwitter %>% top_n(20) %>% mutate(source = "twitter"), 
+                wcblogs %>% top_n(20) %>% mutate(source = "blogs"), 
+                wcnews %>% top_n(20) %>% mutate(source = "news")
+        ) %>%
+        group_by(source) %>% 
+        mutate(word = reorder(word, n)) 
+
+g <- totwords %>% ggplot(aes(reorder(word,n), n, fill = source))
+g + geom_col() + coord_flip() + xlab("Top 20 Words")
+```
+
+We can see some numbers in the top 20 words of each text file. Further analysis is needed to see if they're used as a contraction for spelled out words (e.g, the previous sentence uses "top 20 words" instead of "top twenty words").
+
+## Bigrams and Trigrams: Word Combinations
+
+A predictive text system not only needs to predict the word being typed, but also what the next word will after that. Bigrams, the occurance of two words together, is an important variable in building a good prediction algorthym. 
+
+Let's look for bigrams in the Twitter text. I'll use a purpose built function getngrams() that uses unnest_tokens() tp find word combinations (see appendix for source code):
+
+```{r getngram, echo = FALSE}
+getngrams <- function(ttout, combo) {
+                # This function takes texttidy() output, plus an integer to find ngrames
+                # bigrams: combo = 2. trigrams: combo = 3
+                ttout <- ttout %>%
+                        unnest_tokens(ngram, text, token = "ngrams", n = combo) %>% 
+                        count(ngram, sort = TRUE) %>%
+                        # Look for any occurance more than three times
+                        filter(n > 3) %>%
+                        # drop NA - happens when looking for trigrams
+                        drop_na()
+                ttout
+                }
+```
+```{r}
+getngrams(twitter, 2)
+```
+The top bigrams mostly consist of "stop words" which getngrams() doesn't filter out (unlike wordcount()). At this time, I don't know whether filtering out stop words are important to the eventual prediction product. More thought will be required. 
+
+Let's look at trigrams:
+```{r}
+getngrams(twitter, 3)
+```
+
+
+
+## Data Statistics
+
+Here's a table of each of the text file, the number of words, bigrams. and trigrams:
+
+```{r bi and trigram setup, echo = FALSE}
+
+bgtwitter <- getngrams(twitter, 2)
+bgblogs <- getngrams(blogs, 2)
+bgnews <- getngrams(news, 2)
+
+tgtwitter <- getngrams(twitter, 3)
+tgblogs <- getngrams(blogs, 3)
+tgnews <- getngrams(news, 3)
+```
+```{r Data Table Setup, echo = FALSE}
+dt <- tribble(~File, ~Lines, ~Words, ~Bigrams, ~Trigrams, 
+        "twitter", dim(twitter)[1], dim(wctwitter)[1], dim(bgtwitter)[1], dim(tgtwitter)[1],
+        "blogs", dim(blogs)[1], dim(wcblogs)[1], dim(bgblogs)[1], dim(tgblogs)[1], 
+        "news", dim(news)[1], dim(wcnews)[1], dim(bgnews)[1], dim(tgnews)[1])
+
+```
+
+```{r}
+dt
+```
+
+## Next Steps
+
+blah blah
+
+## Appendix
+
+### texttidy()
+
+```{r texttidy source, eval = FALSE}
+texttidy <- function(filename) {
+        # This function will take a text file and create a tibble with each line of text
+                ttout <- readLines(filename) %>% # Read in the text
+                        as_tibble() # Turn the output into a tibble
+                names(ttout) <- c("text") # Name the variable 'text'
+                # Done
+                ttout
+                }
+```
+
+### wordcount()
+
+```{r wordcount source, eval = FALSE}
+wctwitter <- wordcount(twitter)
+wcblogs <- wordcount(blogs)
+wcnews <- wordcount(news)
+
+totwords <- rbind(wctwitter %>% top_n(20) %>% mutate(source = "twitter"), 
+                wcblogs %>% top_n(20) %>% mutate(source = "blogs"), 
+                wcnews %>% top_n(20) %>% mutate(source = "news")
+        ) %>%
+        group_by(source) %>% 
+        mutate(word = reorder(word, n)) 
+
+g <- totwords %>% ggplot(aes(reorder(word,n), n, fill = source))
+g + geom_col() + coord_flip() + xlab("Top 20 Words")
+```
+
+### getngrams()
+
+```{r getngram source, eval = FALSE}
+getngrams <- function(ttout, combo) {
+                # This function takes texttidy() output, plus an integer to find ngrames
+                # bigrams: combo = 2. trigrams: combo = 3
+                ttout <- ttout %>%
+                        unnest_tokens(ngram, text, token = "ngrams", n = combo) %>% 
+                        count(ngram, sort = TRUE) %>%
+                        # Look for any occurance more than three times
+                        filter(n > 3) %>%
+                        # drop NA - happens when looking for trigrams
+                        drop_na()
+                ttout
+                }
+```
