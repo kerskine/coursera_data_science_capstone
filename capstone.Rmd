@@ -20,13 +20,11 @@ library(ggplot2)
 
 
 ## Goals
-Has the data scientist done basic summaries of the three files? Word counts, line counts and basic data tables?
-Has the data scientist made basic plots, such as histograms to illustrate features of the data?
-Eventually will develop a predictive text application. Need to find what text to predict. 
+The main goal of this report is to acquire and examine the data set provided and begin to understand to scope of building a predicitve text application
 
 ## Check my work
 
-In order to keep this report consise, I won't be showing (i.e. echo = FALSE) all of the R code in this report. But, you can find the full R Markdown at this location [link]
+In order to keep this report concise, I won't be showing (i.e. echo = FALSE) all of the R code. But, you can find the full R Markdown on GitHub:  (https://github.com/kerskine/coursera_data_science_capstone/blob/master/capstone.Rmd)
 
 ## Using the Tidytext Package 
 
@@ -34,14 +32,31 @@ Course mentions using R's text mining package (tm) but recent but the tidyverse 
 
 ## Getting and Examining the Data
 
-Download
+### Download
 
-The zip files contain a directory "final" which is 2.4 MB in size. In it are subdirectorys of different languages (English, German, Finish, and Russian) each of which have three text files; news, blogs, and twitter. For this report, I'll be using the English files.
+The zip files contain a directory "final" which is 1.4 GB in size. In it are subdirectories of different languages (English, German, Finish, and Russian) each of which have three text files; news, blogs, and twitter. For this report, I'll be using the English files.
 ```{r Setwd, echo = FALSE}
-# setwd("./test/")
+dataset.zip <- "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+download.file(dataset.zip, "data.zip")
+unzip("data.zip")
+```
+Here is some basic information on the text files I'll be examining
+```{r Basic Info, echo = FALSE}
+twitter_file <- "./final/en_US/en_US.twitter.txt"
+blogs_file <- "./final/en_US/en_US.blogs.txt"
+news_file <- "./final/en_US/en_US.news.txt"
+
+info <- tribble(~file, ~sizeMB, ~lines_of_text,
+                "twitter", file.info(twitter_file)$size/1000, countLines(twitter_file),
+                "blogs", file.info(blogs_file)$size/1000, countLines(blogs_file),
+                "news", file.info(news_file)$size/1000, countLines(news_file)
+                )
+info
+
 ```
 
-Next, we'll need to get each of the text files into a tibble that will allow tidytext to manipulate the data. I'll do this using a purpose built function texttidy():
+### Preparing Data
+Next, we'll need to get each of the text files into a tibble that will allow tidytext to manipulate the data. I'll do this using a purpose built function texttidy(). It takes the text file as input and a sample size (5%). The reason for only taking a sample is due to the limitations of my current system used for analysis. I'm making an assumption that the data is sufficiently randomized:
 
 ```{r Tibble Data, echo = FALSE, warning = FALSE, message = FALSE}
 texttidy <- function(filename, samplesize = 0.05) {
@@ -66,7 +81,7 @@ news <- texttidy("./final/en_US/en_US.news.txt", 0.05)
 ```
 
 ## Word Counts
-With the text files now ready for analysis, we can look at the number of distinct words in each tibble. I'll do this with another purpose built function called wordcount(). It uses the tidytext function unnest_tokens() to tease out each word, and then uses the stop_words dataset to eliminate words like is, it, the, etc.. (see appendix for source code):
+With the text files now ready for analysis, we can look at the number of distinct words in each tibble. I'll do this with another purpose built function called wordcount(). It uses the tidytext function unnest_tokens() to tease out each word, and then uses the stop_words data set to eliminate words like is, it, the, etc.. (see appendix for source code):
 
 ```{r Wordcount Func, echo = FALSE, warning = FALSE, message = FALSE}
 wordcount <- function(ttout) {
@@ -86,7 +101,7 @@ wordcount <- function(ttout) {
 wctwitter <- wordcount(twitter)
 wctwitter
 ```
-This is interesting; Love is one of the top ten words! You also see a word "rt" which means "retweet". One of the challenges in predictive text will be to determine if "rt" is something to include in an algorythum. This phrase has been used less on Twitter since a number of UI changes have been introduced.
+This is interesting; Love is one of the top ten words! You also see a word "rt" which means "retweet". One of the challenges in predictive text will be to determine if "rt" is something to include in an algorithm. This phrase has been used less on Twitter since a number of UI changes have been introduced.
 
 What about the other two text files? Are there any words common to all three text files? Here's a graph of the top 20 words in each file:
 
@@ -110,9 +125,9 @@ We can see some numbers in the top 20 words of each text file. Further analysis 
 
 ## Bigrams and Trigrams: Word Combinations
 
-A predictive text system not only needs to predict the word being typed, but also what the next word will after that. Bigrams, the occurance of two words together, is an important variable in building a good prediction algorthym. 
+A predictive text system not only needs to predict the word being typed, but also what the next word will after that. Bigrams, the occurrence of two words together, is an important variable in building a good prediction algorithm. 
 
-Let's look for bigrams in the Twitter text. I'll use a purpose built function getngrams() that uses unnest_tokens() tp find word combinations (see appendix for source code):
+Let's look for bigrams in the Twitter text. I'll use a purpose built function getngrams() that uses unnest_tokens() to find word combinations (see appendix for source code):
 
 ```{r getngram, echo = FALSE}
 getngrams <- function(ttout, combo) {
@@ -138,11 +153,9 @@ Let's look at trigrams:
 getngrams(twitter, 3)
 ```
 
-
-
 ## Data Statistics
 
-Here's a table of each of the text file, the number of words, bigrams. and trigrams:
+Here's a table of each of the sampled text file, the number of words, bigrams. and trigrams:
 
 ```{r bi and trigram setup, echo = FALSE}
 
@@ -159,25 +172,25 @@ dt <- tribble(~File, ~Lines, ~Words, ~Bigrams, ~Trigrams,
         "twitter", dim(twitter)[1], dim(wctwitter)[1], dim(bgtwitter)[1], dim(tgtwitter)[1],
         "blogs", dim(blogs)[1], dim(wcblogs)[1], dim(bgblogs)[1], dim(tgblogs)[1], 
         "news", dim(news)[1], dim(wcnews)[1], dim(bgnews)[1], dim(tgnews)[1])
-
-```
-
-```{r}
 dt
 ```
 
+
 ## Next Steps
 
-blah blah
+* More cleaning of the data is needed as their are other characters in the data set (i.e. Japanese and Chinese).
+* Sampling of the data set (not shown here) seems to yield similar results, but I'll need to find a more efficient means of mining the entire contents of the files supplied. 
+
 
 ## Appendix
 
 ### texttidy()
 
 ```{r texttidy source, eval = FALSE}
-texttidy <- function(filename) {
+texttidy <- function(filename, samplesize = 0.05) {
         # This function will take a text file and create a tibble with each line of text
-                ttout <- readLines(filename) %>% # Read in the text
+                count <- countLines(filename)
+                ttout <- readLines(filename, n = count * samplesize) %>% # Read in the text
                         as_tibble() # Turn the output into a tibble
                 names(ttout) <- c("text") # Name the variable 'text'
                 # Done
